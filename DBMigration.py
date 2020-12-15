@@ -2,16 +2,16 @@
 This script is intended to migrate from the old sqlite StumbleServer db to the 2020 model.
 """
 
-import sqlite3, json, pony
+import sqlite3, json, os
 from sqlalchemy.orm import sessionmaker
 import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from SqlAlchemyTables import *
 
-#db_string = "postgresql://doadmin:sy1fhjbzc7lg4iu1@db-postgresql-nyc1-51092-do-user-8299087-0.b.db.ondigitalocean.com:25060/Stumblingon?sslmode=require"
+db_string = os.environ["DB_STRING"]
 #engine = create_engine(db_string, echo=False)
-engine = create_engine("sqlite:////home/hapax/projects/StumbleServer/test.db", echo=False)
+#engine = create_engine("sqlite:////home/hapax/projects/StumbleServer/test.db", echo=False)
 
 Session = sessionmaker(bind=engine)
 Base.metadata.create_all(engine)
