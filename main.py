@@ -169,7 +169,7 @@ async def get_site(r: GetSiteRequest):
     if r.prevId:
         prev_site = session.query(Site).get(r.prevId)
 
-    if prev_site:
+    if prev_site and (not session.query(Visit).get((prev_site.id, user.id))):
         session.add(Visit(userId=user.id, siteId=prev_site.id))
         session.commit()
 
