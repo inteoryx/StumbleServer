@@ -196,7 +196,7 @@ async def submit_site(r: SubmitSiteRequest):
         session.add(Submission(url=r.url, userId=user.id))
 
     session.commit()
-
+    session.close()
     return submit_site_result("Thanks for your submission.  It will be reviewed, and, if approved, added to our index.")
 
 @app.post("/getHistory")
@@ -206,6 +206,7 @@ async def get_history(r: GetHistoryRequest):
     session = Session()
     visits = session.query(Visit).filter_by(userId=user.id).order_by(Visit.createdDate.desc()).offset(r.start).limit(r.pageSize+1).all()
     visits = [{"id": v.siteId, "url": v.site.url, "liked": v.liked, "visitDate": v.createdDate} if v.site != None else {"id": "error", "url": "this site has been removed from the index", "liked": v.liked} for v in visits ]
+    session.close()
     #We get 1 more than the page size and cut it off.  This tells us if more results exist.
     return get_history_result(visits[:r.pageSize], len(visits) > r.pageSize)
 
@@ -221,7 +222,7 @@ async def like(r: LikeRequest):
     final_like_state = not visit.liked
     visit.liked = final_like_state
     session.commit()
-
+    session.close()
     return {"liked": final_like_state, 'ok': True}
 
 @app.post("/updateSubmissions")
@@ -243,6 +244,7 @@ async def update_submissions(r: UpdateSubmissionsRequest):
     submission.reason = r.reason
 
     session.commit()
+    session.close()
 
     return {"ok": True, "submissionId": submission.url}
 
@@ -251,7 +253,7 @@ async def get_submissions(r: GetSubmissionsRequest):
     results = None
     session = Session()
     results = [s.j() for s in (session.query(Submission).filter_by(status=r.status))]
-
+    session.close()
     return {"submissions": results, "size": len(results)}
 
 @app.post("/addSite")
@@ -282,7 +284,7 @@ async def like(r: AddSiteRequest):
     new_site = Site(id=str(uuid4()), url=submission.url)
     session.add(new_site)
     session.commit()
-
+    session.close()
     return {"ok": True, "siteId": new_site.id}
 
 @app.post("/historyStumbles")
@@ -301,7 +303,7 @@ async def history_stumbles(r: HistoryStumblesRequest):
     while start < end:
         result.extend(visits_between(start, start+increment, like_required=r.liked))
         start = start + increment
-        
+    session.close()
     return result
 
 @app.post("/historyUsers")
@@ -320,5 +322,5 @@ async def history_stumbles(r: HistoryStumblesRequest):
     while start < end:
         result.extend(users_between(start, start+increment))
         start = start + increment
-        
+    session.close()        
     return result
