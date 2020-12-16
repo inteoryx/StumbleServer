@@ -28,7 +28,8 @@ class Helper:
         self.worker = threading.Thread(target=self.update, daemon=True)
         self.worker.start()
         self.metrics_file = open("metrics.html").read()
-
+        self.memo = {}
+        
     def update(self):
         while True:
             session = self.sm()
@@ -38,11 +39,11 @@ class Helper:
                 try:
                     r = requests.get(site.url, allow_redirects=True)
                     if r.status_code < 400:
-                        up_sites.append(r)
+                        up_sites.append(site)
                 except:
                     pass
             print(f"{datetime.datetime.utcnow()}: {len(up_sites)} / {len(sites)} sites up")
-            self.all_sites = up_sites
+            self.all_sites = {site.id:site for site in up_sites}
             time.sleep(86400) #Run this once per day.
 
             
@@ -292,6 +293,11 @@ async def history_stumbles(r: HistoryStumblesRequest):
     """
     Intended to return number of stumbles over time
     """
+
+    key = (r.start, r.increment, r.liked)
+    if key in helper.memo and datetime.datetime.utcnow() - helper.memo[key]["time"] < datetime.timedelta(minutes=10):
+        return helper.memo[key]["result"]
+
     start = format_date(r.start)
     end = format_date(r.end)
     increment = datetime.timedelta(minutes=r.increment)
@@ -304,6 +310,11 @@ async def history_stumbles(r: HistoryStumblesRequest):
         result.extend(visits_between(start, start+increment, like_required=r.liked))
         start = start + increment
     session.close()
+
+    helper.memo[key] = {"time": datetime.datetime.utcnow(), "result": result}
+    if len(helper.memo) > 1000:
+        helper.memo = {}
+
     return result
 
 @app.post("/historyUsers")
@@ -311,6 +322,12 @@ async def history_stumbles(r: HistoryStumblesRequest):
     """
     Intended to return number of unique users over time
     """
+    #This caches the last call, so it will kind of break getting a unique response per parameter.
+    
+    key = (r.start, r.increment)
+    if key in helper.memo and datetime.datetime.utcnow() - helper.memo[key]["time"] < datetime.timedelta(minutes=10):
+        return helper.memo[key]["result"]
+
     start = format_date(r.start)
     end = format_date(r.end)
     increment = datetime.timedelta(minutes=r.increment)
@@ -322,5 +339,10 @@ async def history_stumbles(r: HistoryStumblesRequest):
     while start < end:
         result.extend(users_between(start, start+increment))
         start = start + increment
-    session.close()        
+    session.close()
+
+    helper.memo[key] = {"time": datetime.datetime.utcnow(), "result": result}
+    if len(helper.memo) > 1000:
+        helper.memo = {}
+
     return result

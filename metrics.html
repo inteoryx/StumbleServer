@@ -9,7 +9,7 @@
             const ds = d.toISOString();
             return ds.substr(0, ds.indexOf("."));
         }
-        const URL = "https://service.stumblingon.com/"
+        const URL = "https://service.stumblingon.com/";
         function drawChart(cid, title, xs, ys){    
             var ctx = document.getElementById(cid).getContext('2d');
             var myChart = new Chart(ctx, {
@@ -38,7 +38,7 @@
 
         const today = new Date();
         const sd = new Date();
-        sd.setDate(sd.getDate() - 1);
+        sd.setHours(sd.getHours() - 6, 0, 0, 0)
         const start = dateString(sd);
         const end = dateString(today);
         console.log(start, end);
