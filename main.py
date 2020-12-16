@@ -5,6 +5,7 @@ import datetime, random
 from multiprocessing import Lock
 from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 
 import os
 
@@ -26,10 +27,10 @@ class Helper:
         self.sm = sm
         self.worker = threading.Thread(target=self.update, daemon=True)
         self.worker.start()
+        self.metrics_file = open("metrics.html").read()
 
     def update(self):
         while True:
-            time.sleep(86400) #Run this once per day.
             session = self.sm()
             sites = session.query(Site).all()
             up_sites = []
@@ -42,6 +43,7 @@ class Helper:
                     pass
             print(f"{datetime.datetime.utcnow()}: {len(up_sites)} / {len(sites)} sites up")
             self.all_sites = up_sites
+            time.sleep(86400) #Run this once per day.
 
             
 app = FastAPI()
@@ -156,9 +158,9 @@ def get_user(user_id):
         session.commit()
     return user
 
-@app.get("/")
+@app.get("/metrics", response_class=HTMLResponse)
 def read_root():
-    return {"Hello": "World"}
+    return HTMLResponse(content=helper.metrics_file, status_code=200)
 
 @app.post("/getSite")
 async def get_site(r: GetSiteRequest):
