@@ -243,11 +243,12 @@ async def update_submissions(r: UpdateSubmissionsRequest):
 
     submission.status = r.newStatus
     submission.reason = r.reason
+    result = {"ok": True, "submissionId": submission.url}
 
     session.commit()
     session.close()
 
-    return {"ok": True, "submissionId": submission.url}
+    return result
 
 @app.post("/getSubmissions")
 async def get_submissions(r: GetSubmissionsRequest):
@@ -284,9 +285,10 @@ async def like(r: AddSiteRequest):
 
     new_site = Site(id=str(uuid4()), url=submission.url)
     session.add(new_site)
+    result = {"ok": True, "siteId": new_site.id}
     session.commit()
     session.close()
-    return {"ok": True, "siteId": new_site.id}
+    return result
 
 @app.post("/historyStumbles")
 async def history_stumbles(r: HistoryStumblesRequest):
