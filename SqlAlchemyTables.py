@@ -35,6 +35,9 @@ class Visit(Base):
     user = relationship("User", back_populates="visits")
     site = relationship("Site", back_populates="visits")
 
+    def __repr__(self):
+        return f"<Visit {self.userId}:{self.site.url}, {self.createdDate}>"
+
 class Submission(Base):
     __tablename__ = "Submission"
 
@@ -65,3 +68,18 @@ class Submission(Base):
             "createdDate": self.createdDate,
             "updatedDate": self.updatedDate
         }
+
+
+class Metric(Base):
+    __tablename__ = "Metric"
+
+    HOURLY_NEW_USERS = "Hourly New Users"
+    HOURLY_NEW_SITES = "Hourly Sites"
+    HOURLY_NEW_VISITS = "Hourly Visits"
+    HOURLY_LIKES = "Hourly Likes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    createdDate = Column(DateTime, server_default=func.now())
+    time = Column(DateTime)
+    amount = Column(Integer, default=0)
+    description = Column(String)

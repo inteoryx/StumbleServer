@@ -10,9 +10,7 @@ from fastapi.responses import HTMLResponse
 import os
 
 from sqlalchemy.orm import sessionmaker
-import sqlalchemy
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
 from SqlAlchemyTables import *
 
 import requests, time, threading
@@ -31,6 +29,7 @@ class Helper:
         self.memo = {}
         
     def update(self):
+        time.sleep(100)
         while True:
             session = self.sm()
             sites = session.query(Site).all()
@@ -105,6 +104,11 @@ class HistoryStumblesRequest(BaseModel):
     end: str = "2020-12-01T00:00:00"
     increment: int = 60
     liked: bool = False
+
+class GetMetricsRequest(BaseModel):
+    start: str = "2020-12-01T00:00:00"
+    end: str = "2020-12-01T00:00:00"
+    metricType: str = Metric.HOURLY_NEW_USERS
     
 def format_date(d: str):
     try:
@@ -140,6 +144,7 @@ def visits_between(start, end, like_required):
         Visit.createdDate.between(start, end),
         (not like_required or Visit.liked)).count()
     ))
+    session.close()
 
     return result
 
@@ -147,6 +152,7 @@ def users_between(start, end):
     result = []
     session = Session()
     result.append((start, len(set(s.userId for s in session.query(Visit).filter(Visit.createdDate.between(start, end)).all())) ))
+    session.close()
 
     return result
 
@@ -290,6 +296,40 @@ async def like(r: AddSiteRequest):
     session.close()
     return result
 
+@app.post("/getMetrics")
+async def get_metrics(r: GetMetricsRequest):
+    """
+    Return a series of (datetime, amount) pairs representing the requested metric
+    """
+
+    try:
+        start_date = datetime.datetime.strptime(r.start, "%Y-%m-%dT%H")
+        end_date = datetime.datetime.strptime(r.end, "%Y-%m-%dT%H")
+    except ValueError:
+        return {"ok": False, "message": "Invalid date format.  Use YYYY-MM-DD:HH"}
+
+    # If end_date is more than 10 days after start_date return an error
+    if (end_date - start_date).days > 10:
+        return {"ok": False, "message": "The date range must be less than 10 days"}
+
+    # If end_date comes before start_date return an error
+    if end_date <= start_date:
+        return {"ok": False, "message": "The end date must be after the start date"}
+
+    # Get all metrics of requested type between start and end times
+    session = Session()
+    metrics = session.query(Metric).filter(
+        Metric.description == r.metricType, 
+        Metric.time >= start_date, 
+        Metric.time <= end_date
+    ).all()
+
+    result = [(m.time, m.amount) for m in metrics]
+    session.close()
+
+    return {"metrics": result, "ok": True}
+
+
 @app.post("/historyStumbles")
 async def history_stumbles(r: HistoryStumblesRequest):
     """
@@ -311,7 +351,6 @@ async def history_stumbles(r: HistoryStumblesRequest):
     while start < end:
         result.extend(visits_between(start, start+increment, like_required=r.liked))
         start = start + increment
-    session.close()
 
     helper.memo[key] = {"time": datetime.datetime.utcnow(), "result": result}
     if len(helper.memo) > 1000:
@@ -320,7 +359,7 @@ async def history_stumbles(r: HistoryStumblesRequest):
     return result
 
 @app.post("/historyUsers")
-async def history_stumbles(r: HistoryStumblesRequest):
+async def history_users(r: HistoryStumblesRequest):
     """
     Intended to return number of unique users over time
     """
@@ -341,7 +380,6 @@ async def history_stumbles(r: HistoryStumblesRequest):
     while start < end:
         result.extend(users_between(start, start+increment))
         start = start + increment
-    session.close()
 
     helper.memo[key] = {"time": datetime.datetime.utcnow(), "result": result}
     if len(helper.memo) > 1000:

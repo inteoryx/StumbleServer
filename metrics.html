@@ -9,7 +9,8 @@
             const ds = d.toISOString();
             return ds.substr(0, ds.indexOf("."));
         }
-        const URL = "https://service.stumblingon.com/";
+        //const URL = "https://service.stumblingon.com/";
+        const URL = "http://127.0.0.1:8000/";
         function drawChart(cid, title, xs, ys){    
             var ctx = document.getElementById(cid).getContext('2d');
             var myChart = new Chart(ctx, {
