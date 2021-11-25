@@ -1,93 +1,211 @@
+<!doctype html>
+
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Stumblingon Metrics Page</title>
-    <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.min.js"></script>
-    <script>
-        function dateString(d){
-            const ds = d.toISOString();
-            return ds.substr(0, ds.indexOf("."));
-        }
-        //const URL = "https://service.stumblingon.com/";
-        const URL = "http://127.0.0.1:8000/";
-        function drawChart(cid, title, xs, ys){    
-            var ctx = document.getElementById(cid).getContext('2d');
-            var myChart = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: xs,
-                    datasets: [{
-                        label: title,
-                        data: ys,
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    scales: {
-                        yAxes: [{
-                            ticks: {
-                                beginAtZero: true
-                            }
-                        }]
-                    }
-                }
-            });
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>StumblingOn Metrics</title>
+  <meta name="description" content="Metrics page for StumblingOn">
+  <meta name="author" content="inteoryx">
+
+  <meta property="og:title" content="StumblingOn Metrics">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://service.stumblingon.com/metrics">
+  <meta property="og:description" content="See metrics for https://stumblingon.com.">
+  
+  <head>
+
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+            font-size: 20px;
+            background-color: whitesmoke;
         }
 
-        const today = new Date();
-        const sd = new Date();
-        sd.setHours(sd.getHours() - 6, 0, 0, 0)
-        const start = dateString(sd);
-        const end = dateString(today);
-        console.log(start, end);
-        const decoder = new TextDecoder('utf-8')
-
-        function chartData(u, liked, cid, name){
-            fetch(URL + u, {
-                method: 'POST',
-                mode: 'cors',
-                body: JSON.stringify({
-                    'start': start,
-                    'end': end,
-                    'increment': 60,
-                    'liked': liked
-                }),
-                headers: {
-                    'Content-Type': 'application/json'
-                }
-            })
-            .then(response => response.body)
-            .then((rs)=>{
-                rs.getReader()
-                .read()
-                .then(({value, done})=>{
-                    const rawdata = JSON.parse(decoder.decode(value));
-                    const xs = [];
-                    const ys = [];
-                    for(var i = 0; i < rawdata.length; i++){
-                        xs.push(rawdata[i][0]);
-                        ys.push(rawdata[i][1]);
-                    }
-                    drawChart(cid, name, xs, ys);
-                });
-            })
+        .metricsContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
         }
 
-        function setup(){
-            chartData("historyStumbles", true, "likes", "# of likes");
-            chartData("historyStumbles", false, "stumbles", "# of stumbles");
-            chartData("historyUsers", false, "uniqueUsers", "# of users");
+        .metric {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 90%;
+            height: 400px;
+            background-color: whitesmoke;
+            box-sizing: border-box;
         }
-        
-        </script>
-</head>
-<body onload="setup()">
-    <canvas id="uniqueUsers" width="400" height="400"></canvas>
-    <canvas id="likes" width="400" height="400"></canvas>
-    <canvas id="stumbles" width="400" height="400"></canvas>
+
+        .summaryMetrics {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            justify-content: center;
+        }
+    </style>
     
+
+  </head>
+
+</head>
+
+<body>
+    <h1>StumblingOn Metrics</h1>
+    <div class="summaryMetrics">
+        <h2>Last 10 Days</h2>
+        <div id="summaryMetricsDetails">
+            <div id="last10Users">Users: </div>
+            <div id="last10Stumbles">Stumbles: </div>
+            <div id="last10Likes">Likes: </div>
+        </div>
+    </div>
+    <div class="metricsContainer">
+        <h2>Likes</h2>
+        <div class="metric">
+            <canvas id="likes" class="graph" />
+        </div>
+        <h2>Stumbles</h2>
+        <div class="metric">
+            <canvas id="views" class="graph" />
+        </div>
+        <h2>New Users</h2>
+        <div class="metric">
+            <canvas id="users" class="graph" />
+        </div>
+    </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.6.0/dist/chart.min.js"></script>
+  <script>
+    function prettyPrintNumber(n){
+        return n.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    }
+    const URL = "http://127.0.0.1:8000/";
+    function dateString(d){
+        // Returns a date in YYYY-MM-DDTHH format
+        return d.toISOString().substr(0, d.toISOString().indexOf(":"));
+    }
+
+    const ctx = document.getElementById('likes').getContext('2d');
+    const stumblesCtx = document.getElementById('views').getContext('2d');
+    const usersCtx = document.getElementById('users').getContext('2d');
+
+    const today = new Date();
+    const before = new Date(Date.now() - (1000 * 10 * 24 * 60 * 60));
+    
+    // fetch metrics for likes
+    fetch(URL + 'getMetrics', {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({
+            'start': dateString(before),
+            'end': dateString(today),
+            'metricType': "Hourly Likes"
+        }),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    }).then(response => response.json(), (e) => console.log(e)).then(data => {
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Likes',
+                    data: data.metrics.map(m => [m[0].substr(m[0].indexOf("-") + 1, m[0].indexOf(":")), m[1]]),
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    },
+                },
+                maintainAspectRatio: false,
+            }
+        });
+
+        const likesCount = data.metrics.reduce((acc, cur) => acc + cur[1], 0);
+        console.log(likesCount);
+        document.getElementById('last10Likes').innerHTML = "Likes: " + prettyPrintNumber(likesCount);
+
+    });
+
+    // fetch metrics for stumbles
+    fetch(URL + 'getMetrics', {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({
+            'start': dateString(before),
+            'end': dateString(today),
+            'metricType': "Hourly Visits"
+        }),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    }).then(response => response.json(), (e) => console.log(e)).then(data => {
+        const myChart = new Chart(stumblesCtx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'Stumbles',
+                    data: data.metrics.map(m => [m[0].substr(m[0].indexOf("-") + 1, m[0].indexOf(":")), m[1]]),
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    },
+                },
+                maintainAspectRatio: false,
+            }
+        });
+
+        const stumbleCount = data.metrics.reduce((acc, cur) => acc + cur[1], 0);
+        document.getElementById('last10Stumbles').innerHTML = "Stumbles: " + prettyPrintNumber(stumbleCount);
+
+    });
+
+
+    // fetch metrics for new users
+    fetch(URL + 'getMetrics', {
+        method: 'POST',
+        mode: 'cors',
+        body: JSON.stringify({
+            'start': dateString(before),
+            'end': dateString(today),
+            'metricType': "Hourly New Users"
+        }),
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    }).then(response => response.json(), (e) => console.log(e)).then(data => {
+            const myChart = new Chart(usersCtx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: 'New Users',
+                    data: data.metrics.map(m => [m[0].substr(m[0].indexOf("-") + 1, m[0].indexOf(":")), m[1]]),
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    },
+                },
+                maintainAspectRatio: false,
+            }
+        });
+
+        const userCount = data.metrics.reduce((acc, cur) => acc + cur[1], 0);
+        document.getElementById('last10Users').innerHTML = "Users: " + prettyPrintNumber(userCount);
+    });
+      
+    
+  </script>
 </body>
 </html>
