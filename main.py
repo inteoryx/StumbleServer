@@ -24,7 +24,9 @@ class Helper:
     def __init__(self, sm):
         self.sm = sm
         self.worker = threading.Thread(target=self.update, daemon=True)
+        self.update_worker = threading.Thread(target=self.update_metrics, daemon=True)
         self.worker.start()
+        self.update_worker.start()
         self.metrics_file = open("metrics.html").read()
         self.memo = {}
         
@@ -44,6 +46,52 @@ class Helper:
             print(f"{datetime.datetime.utcnow()}: {len(up_sites)} / {len(sites)} sites up")
             self.all_sites = {site.id:site for site in up_sites}
             time.sleep(86400) #Run this once per day.
+
+    def update_metrics(self):
+        """
+        For HOURLY_LIKES, HOURLY_VISITS, and HOURLY_USERS
+        Create metrics from the hour after the last metric up to now
+        """
+
+        while True:
+            session = self.sm()
+
+            last_metric = session.query(Metric).order_by(Metric.time.desc()).first()
+            cur = datetime.datetime(last_metric.time.year, last_metric.time.month, last_metric.time.day, last_metric.time.hour)
+            now_time = datetime.datetime.now()
+            metrics = []
+
+            while cur < now_time:
+                next_time = cur + datetime.timedelta(hours=1)
+                
+                visits = session.query(Visit).filter(Visit.createdDate >= cur, Visit.createdDate < next_time).count()
+                likes = session.query(Visit).filter(Visit.createdDate >= cur, Visit.createdDate < next_time, Visit.liked == True).count()
+                users = session.query(User).filter(User.createdDate >= cur, User.createdDate < next_time).count()
+
+                metrics = metrics + [
+                    Metric(time=cur, description=Metric.HOURLY_NEW_VISITS, amount=visits),
+                    Metric(time=cur, description=Metric.HOURLY_LIKES, amount=likes),
+                    Metric(time=cur, description=Metric.HOURLY_NEW_USERS, amount=users)
+                ]
+
+                if len(metrics) > 100:
+                    session.add_all(metrics)
+                    session.commit()
+                    metrics = []
+
+                print("Adding metrics for", cur)
+
+                session.add_all(metrics)
+                session.commit()
+
+                cur = next_time
+
+            session.add_all(metrics)
+            session.commit()
+
+            session.close()
+
+            time.sleep(60 * 60) #Run this once per hour.
 
             
 app = FastAPI()
