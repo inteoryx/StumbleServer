@@ -267,10 +267,6 @@ def count_unique_users(r: CountUsersRequest):
 
     session.close()
 
-    helper.last_lock.acquire()
-    helper.last_new_users = (users, datetime.datetime.now())
-    helper.last_lock.release()
-
     return {"ok": True, "count": users}
 
 
