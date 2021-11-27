@@ -1,7 +1,8 @@
 from typing import Optional
 from pydantic import BaseModel
 from fastapi import FastAPI
-import datetime, random
+import datetime
+import random
 from multiprocessing import Lock
 from uuid import uuid4
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,7 +14,10 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from SqlAlchemyTables import *
 
-import requests, time, threading
+import requests
+import time
+import threading
+
 
 class Helper:
     busy = Lock()
@@ -24,12 +28,13 @@ class Helper:
     def __init__(self, sm):
         self.sm = sm
         self.worker = threading.Thread(target=self.update, daemon=True)
-        self.update_worker = threading.Thread(target=self.update_metrics, daemon=True)
+        self.update_worker = threading.Thread(
+            target=self.update_metrics, daemon=True)
         self.worker.start()
         self.update_worker.start()
         self.metrics_file = open("metrics.html").read()
         self.memo = {}
-        
+
     def update(self):
         time.sleep(100)
         while True:
@@ -43,9 +48,10 @@ class Helper:
                         up_sites.append(site)
                 except:
                     pass
-            print(f"{datetime.datetime.utcnow()}: {len(up_sites)} / {len(sites)} sites up")
-            self.all_sites = {site.id:site for site in up_sites}
-            time.sleep(86400) #Run this once per day.
+            print(
+                f"{datetime.datetime.utcnow()}: {len(up_sites)} / {len(sites)} sites up")
+            self.all_sites = {site.id: site for site in up_sites}
+            time.sleep(86400)  # Run this once per day.
 
     def update_metrics(self):
         """
@@ -54,24 +60,34 @@ class Helper:
         """
 
         while True:
+            # Wait at start of loop so restarting the server doesn't cause a bunch of metrics to be created
+            time.sleep(60 * 60)  # Run this once per hour.
+
             session = self.sm()
 
-            last_metric = session.query(Metric).order_by(Metric.time.desc()).first()
-            cur = datetime.datetime(last_metric.time.year, last_metric.time.month, last_metric.time.day, last_metric.time.hour)
+            last_metric = session.query(Metric).order_by(
+                Metric.time.desc()).first()
+            cur = datetime.datetime(
+                last_metric.time.year, last_metric.time.month, last_metric.time.day, last_metric.time.hour)
             now_time = datetime.datetime.now()
             metrics = []
 
             while cur < now_time:
                 next_time = cur + datetime.timedelta(hours=1)
-                
-                visits = session.query(Visit).filter(Visit.createdDate >= cur, Visit.createdDate < next_time).count()
-                likes = session.query(Visit).filter(Visit.createdDate >= cur, Visit.createdDate < next_time, Visit.liked == True).count()
-                users = session.query(User).filter(User.createdDate >= cur, User.createdDate < next_time).count()
+
+                visits = session.query(Visit).filter(
+                    Visit.createdDate >= cur, Visit.createdDate < next_time).count()
+                likes = session.query(Visit).filter(
+                    Visit.createdDate >= cur, Visit.createdDate < next_time, Visit.liked == True).count()
+                users = session.query(User).filter(
+                    User.createdDate >= cur, User.createdDate < next_time).count()
 
                 metrics = metrics + [
-                    Metric(time=cur, description=Metric.HOURLY_NEW_VISITS, amount=visits),
+                    Metric(
+                        time=cur, description=Metric.HOURLY_NEW_VISITS, amount=visits),
                     Metric(time=cur, description=Metric.HOURLY_LIKES, amount=likes),
-                    Metric(time=cur, description=Metric.HOURLY_NEW_USERS, amount=users)
+                    Metric(
+                        time=cur, description=Metric.HOURLY_NEW_USERS, amount=users)
                 ]
 
                 if len(metrics) > 100:
@@ -91,9 +107,7 @@ class Helper:
 
             session.close()
 
-            time.sleep(60 * 60) #Run this once per hour.
 
-            
 app = FastAPI()
 
 app.add_middleware(
@@ -110,27 +124,33 @@ Session = sessionmaker(bind=engine)
 
 session = Session()
 helper = Helper(Session)
-helper.all_sites = {site.id:site for site in session.query(Site).all()}
+helper.all_sites = {site.id: site for site in session.query(Site).all()}
+
 
 class GetUserRequest(BaseModel):
     userId: str
 
+
 class GetSiteRequest(BaseModel):
     userId: str
     prevId: str = ""
+
 
 class GetHistoryRequest(BaseModel):
     userId: str
     start: int
     pageSize: int = 10
 
+
 class SubmitSiteRequest(BaseModel):
     userId: str
     url: str
 
+
 class LikeRequest(BaseModel):
     userId: str
     siteId: str
+
 
 class AddSiteRequest(BaseModel):
     auth: str
@@ -138,14 +158,17 @@ class AddSiteRequest(BaseModel):
     userId: str
     reason: Optional[str]
 
+
 class UpdateSubmissionsRequest(BaseModel):
     auth: str
     url: str = "http://example.com"
     newStatus: int
     reason: Optional[str]
 
+
 class GetSubmissionsRequest(BaseModel):
     status: int
+
 
 class HistoryStumblesRequest(BaseModel):
     start: str = "2020-12-01T00:00:00"
@@ -153,16 +176,23 @@ class HistoryStumblesRequest(BaseModel):
     increment: int = 60
     liked: bool = False
 
+
 class GetMetricsRequest(BaseModel):
     start: str = "2020-12-01T00:00:00"
     end: str = "2020-12-01T00:00:00"
     metricType: str = Metric.HOURLY_NEW_USERS
-    
+
+
+class CountUsersRequest(BaseModel):
+    nHoursBack: int = 24
+
+
 def format_date(d: str):
     try:
         return datetime.datetime.strptime(d, "%Y-%m-%dT%H:%M:%S")
     except:
         return None
+
 
 def get_site_result(url: str, site_id: str):
     return {
@@ -171,11 +201,13 @@ def get_site_result(url: str, site_id: str):
         "ok": True
     }
 
+
 def submit_site_result(message: str):
     return {
         "message": message,
         "ok": True
     }
+
 
 def get_history_result(history, more):
     return {
@@ -184,6 +216,7 @@ def get_history_result(history, more):
         "results": history,
         "ok": True
     }
+
 
 def visits_between(start, end, like_required):
     result = []
@@ -196,13 +229,16 @@ def visits_between(start, end, like_required):
 
     return result
 
+
 def users_between(start, end):
     result = []
     session = Session()
-    result.append((start, len(set(s.userId for s in session.query(Visit).filter(Visit.createdDate.between(start, end)).all())) ))
+    result.append((start, len(set(s.userId for s in session.query(
+        Visit).filter(Visit.createdDate.between(start, end)).all()))))
     session.close()
 
     return result
+
 
 def get_user(user_id):
     session = Session()
@@ -213,9 +249,35 @@ def get_user(user_id):
         session.commit()
     return user
 
+
+@app.post("/countUniqueUsers")
+def count_unique_users(r: CountUsersRequest):
+    """
+    Count the number of unique users who have a visit in the last n hours.
+    """
+
+    session = Session()
+
+    now = datetime.datetime.now()
+    last_n_hours = now - datetime.timedelta(hours=r.nHoursBack)
+
+    users = session.query(Visit).filter(
+        Visit.createdDate >= last_n_hours
+    ).distinct(Visit.userId).count()
+
+    session.close()
+
+    helper.last_lock.acquire()
+    helper.last_new_users = (users, datetime.datetime.now())
+    helper.last_lock.release()
+
+    return {"ok": True, "count": users}
+
+
 @app.get("/metrics", response_class=HTMLResponse)
 def read_root():
     return HTMLResponse(content=helper.metrics_file, status_code=200)
+
 
 @app.post("/getSite")
 async def get_site(r: GetSiteRequest):
@@ -230,7 +292,8 @@ async def get_site(r: GetSiteRequest):
         session.add(Visit(userId=user.id, siteId=prev_site.id))
         session.commit()
 
-    visited = set(h.siteId for h in session.query(Visit).filter_by(userId=user.id).all())
+    visited = set(h.siteId for h in session.query(
+        Visit).filter_by(userId=user.id).all())
     choose_from = tuple(helper.all_sites.keys() - visited)
 
     if len(choose_from) < 1:
@@ -239,6 +302,7 @@ async def get_site(r: GetSiteRequest):
     result = helper.all_sites[random.choice(choose_from)]
     session.close()
     return get_site_result(result.url, result.id)
+
 
 @app.post("/submitSite")
 async def submit_site(r: SubmitSiteRequest):
@@ -254,16 +318,20 @@ async def submit_site(r: SubmitSiteRequest):
     session.close()
     return submit_site_result("Thanks for your submission.  It will be reviewed, and, if approved, added to our index.")
 
+
 @app.post("/getHistory")
 async def get_history(r: GetHistoryRequest):
     user = get_user(r.userId)
     visits = None
     session = Session()
-    visits = session.query(Visit).filter_by(userId=user.id).order_by(Visit.createdDate.desc()).offset(r.start).limit(r.pageSize+1).all()
-    visits = [{"id": v.siteId, "url": v.site.url, "liked": v.liked, "visitDate": v.createdDate} if v.site != None else {"id": "error", "url": "this site has been removed from the index", "liked": v.liked} for v in visits ]
+    visits = session.query(Visit).filter_by(userId=user.id).order_by(
+        Visit.createdDate.desc()).offset(r.start).limit(r.pageSize+1).all()
+    visits = [{"id": v.siteId, "url": v.site.url, "liked": v.liked, "visitDate": v.createdDate} if v.site != None else {
+        "id": "error", "url": "this site has been removed from the index", "liked": v.liked} for v in visits]
     session.close()
-    #We get 1 more than the page size and cut it off.  This tells us if more results exist.
+    # We get 1 more than the page size and cut it off.  This tells us if more results exist.
     return get_history_result(visits[:r.pageSize], len(visits) > r.pageSize)
+
 
 @app.post("/like")
 async def like(r: LikeRequest):
@@ -280,6 +348,7 @@ async def like(r: LikeRequest):
     session.close()
     return {"liked": final_like_state, 'ok': True}
 
+
 @app.post("/updateSubmissions")
 async def update_submissions(r: UpdateSubmissionsRequest):
     if r.auth != helper.secret:
@@ -288,7 +357,7 @@ async def update_submissions(r: UpdateSubmissionsRequest):
             'friendlyMessage': "I do not recognize your secret password.",
             'isRetryable': False,
             'ok': False
-    }
+        }
 
     session = Session()
     submission = session.query(Submission).get(r.url)
@@ -304,13 +373,16 @@ async def update_submissions(r: UpdateSubmissionsRequest):
 
     return result
 
+
 @app.post("/getSubmissions")
 async def get_submissions(r: GetSubmissionsRequest):
     results = None
     session = Session()
-    results = [s.j() for s in (session.query(Submission).filter_by(status=r.status))]
+    results = [s.j()
+               for s in (session.query(Submission).filter_by(status=r.status))]
     session.close()
     return {"submissions": results, "size": len(results)}
+
 
 @app.post("/addSite")
 async def like(r: AddSiteRequest):
@@ -320,14 +392,14 @@ async def like(r: AddSiteRequest):
             'friendlyMessage': "I do not recognize your secret password.",
             'isRetryable': False,
             'ok': False
-    }
+        }
 
     new_site = None
     session = Session()
     submission = session.query(Submission).get(r.url)
     if not submission:
         submission = Submission(
-            userId=get_user(r.userId).id, 
+            userId=get_user(r.userId).id,
             status=1,
             reason="Submitted by owner.",
             url=r.url
@@ -343,6 +415,7 @@ async def like(r: AddSiteRequest):
     session.commit()
     session.close()
     return result
+
 
 @app.post("/getMetrics")
 async def get_metrics(r: GetMetricsRequest):
@@ -367,8 +440,8 @@ async def get_metrics(r: GetMetricsRequest):
     # Get all metrics of requested type between start and end times
     session = Session()
     metrics = session.query(Metric).filter(
-        Metric.description == r.metricType, 
-        Metric.time >= start_date, 
+        Metric.description == r.metricType,
+        Metric.time >= start_date,
         Metric.time <= end_date
     ).all()
 
@@ -397,7 +470,8 @@ async def history_stumbles(r: HistoryStumblesRequest):
 
     result = []
     while start < end:
-        result.extend(visits_between(start, start+increment, like_required=r.liked))
+        result.extend(visits_between(
+            start, start+increment, like_required=r.liked))
         start = start + increment
 
     helper.memo[key] = {"time": datetime.datetime.utcnow(), "result": result}
@@ -406,13 +480,14 @@ async def history_stumbles(r: HistoryStumblesRequest):
 
     return result
 
+
 @app.post("/historyUsers")
 async def history_users(r: HistoryStumblesRequest):
     """
     Intended to return number of unique users over time
     """
-    #This caches the last call, so it will kind of break getting a unique response per parameter.
-    
+    # This caches the last call, so it will kind of break getting a unique response per parameter.
+
     key = (r.start, r.increment)
     if key in helper.memo and datetime.datetime.utcnow() - helper.memo[key]["time"] < datetime.timedelta(minutes=10):
         return helper.memo[key]["result"]
