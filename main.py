@@ -353,13 +353,13 @@ async def like(r: LikeRequest):
     user = get_user(r.userId)
     session = Session()
     visit = session.query(Visit).get((r.siteId, user.id))
-    url = visit.site.url
 
     if not visit:
         logger.warning(
             f"{r.userId} tried to like {r.siteId} but has not visited that site.")
         return {"error": True, "message": f"User {r.userId} has not visited {r.siteId}", "ok": False}
 
+    url = visit.site.url
     final_like_state = not visit.liked
     visit.liked = final_like_state
     session.commit()
