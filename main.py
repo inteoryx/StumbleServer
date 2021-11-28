@@ -10,6 +10,9 @@ from fastapi.responses import HTMLResponse
 
 import os
 
+import logging
+import logging.handlers as handlers
+
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 from SqlAlchemyTables import *
@@ -107,6 +110,17 @@ class Helper:
 
             session.close()
 
+
+logger = logging.getLogger('StumbleServerLogs')
+logger.setLevel(logging.INFO)
+
+logHandler = handlers.TimedRotatingFileHandler(
+    'stumblingon.log', when='midnight', interval=1)
+logHandler.setLevel(logging.INFO)
+logHandler.suffix = "%Y-%m-%d"
+logHandler.setFormatter(logging.Formatter(
+    """%(asctime)s %(levelname)s: %(message)s"""))
+logger.addHandler(logHandler)
 
 app = FastAPI()
 
@@ -297,6 +311,7 @@ async def get_site(r: GetSiteRequest):
 
     result = helper.all_sites[random.choice(choose_from)]
     session.close()
+    logger.info(f"{r.userId} chose {result.url}")
     return get_site_result(result.url, result.id)
 
 
@@ -312,6 +327,7 @@ async def submit_site(r: SubmitSiteRequest):
 
     session.commit()
     session.close()
+    logger.info(f"{r.userId} submitted {r.url}")
     return submit_site_result("Thanks for your submission.  It will be reviewed, and, if approved, added to our index.")
 
 
@@ -325,6 +341,9 @@ async def get_history(r: GetHistoryRequest):
     visits = [{"id": v.siteId, "url": v.site.url, "liked": v.liked, "visitDate": v.createdDate} if v.site != None else {
         "id": "error", "url": "this site has been removed from the index", "liked": v.liked} for v in visits]
     session.close()
+
+    logger.info(
+        f"{r.userId} requested history - start {r.start}, pageSize: {r.pageSize}")
     # We get 1 more than the page size and cut it off.  This tells us if more results exist.
     return get_history_result(visits[:r.pageSize], len(visits) > r.pageSize)
 
@@ -334,20 +353,26 @@ async def like(r: LikeRequest):
     user = get_user(r.userId)
     session = Session()
     visit = session.query(Visit).get((r.siteId, user.id))
+    url = visit.site.url
 
     if not visit:
+        logger.warning(
+            f"{r.userId} tried to like {r.siteId} but has not visited that site.")
         return {"error": True, "message": f"User {r.userId} has not visited {r.siteId}", "ok": False}
 
     final_like_state = not visit.liked
     visit.liked = final_like_state
     session.commit()
     session.close()
+    logger.info(f"{r.userId} liked {url}")
     return {"liked": final_like_state, 'ok': True}
 
 
 @app.post("/updateSubmissions")
 async def update_submissions(r: UpdateSubmissionsRequest):
     if r.auth != helper.secret:
+        logger.warning(
+            f"{r.userId} tried to update submissions but failed auth with key {r.auth}.")
         return {
             'errorMessage': "Invalid auth key",
             'friendlyMessage': "I do not recognize your secret password.",
@@ -367,6 +392,7 @@ async def update_submissions(r: UpdateSubmissionsRequest):
     session.commit()
     session.close()
 
+    logger.info(f"Updated submission {r.url} to status {r.newStatus}")
     return result
 
 
@@ -377,12 +403,17 @@ async def get_submissions(r: GetSubmissionsRequest):
     results = [s.j()
                for s in (session.query(Submission).filter_by(status=r.status))]
     session.close()
+
+    logger.info(f"Requested submissions with status {r.status}")
     return {"submissions": results, "size": len(results)}
 
 
 @app.post("/addSite")
 async def like(r: AddSiteRequest):
     if r.auth != helper.secret:
+        logger.warning(
+            f"{r.userId} tried to add site but failed auth with key {r.auth}."
+        )
         return {
             'errorMessage': "Invalid auth key",
             'friendlyMessage': "I do not recognize your secret password.",
@@ -410,6 +441,7 @@ async def like(r: AddSiteRequest):
     result = {"ok": True, "siteId": new_site.id}
     session.commit()
     session.close()
+    logger.info(f"{r.userId} added {r.url}")
     return result
 
 
@@ -444,6 +476,8 @@ async def get_metrics(r: GetMetricsRequest):
     result = [(m.time, m.amount) for m in metrics]
     session.close()
 
+    logger.info(
+        f"Requested metrics {r.metricType} between {r.start} and {r.end}")
     return {"metrics": result, "ok": True}
 
 
@@ -474,6 +508,7 @@ async def history_stumbles(r: HistoryStumblesRequest):
     if len(helper.memo) > 1000:
         helper.memo = {}
 
+    logger.info(f"Requested history of stumbles between {r.start} and {r.end}")
     return result
 
 
@@ -504,4 +539,5 @@ async def history_users(r: HistoryStumblesRequest):
     if len(helper.memo) > 1000:
         helper.memo = {}
 
+    logger.info(f"Requested history of users between {r.start} and {r.end}")
     return result
